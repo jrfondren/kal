@@ -20,7 +20,8 @@
     burnt = 0 :: number(),
     weight = 0 :: number(),
     eats = [] :: list(#eat{}),
-    rolling :: {number(), number(), number()} | undefined
+    weekly :: {number(), number(), number(), number()} | undefined,
+    monthly :: {number(), number(), number(), number()} | undefined
 }).
 
 -spec populated(#day{}) -> boolean().
@@ -36,8 +37,8 @@ populated_test() ->
 deficit(#day{eats = Eats, burnt = Burnt}) ->
     lists:sum(lists:map(fun(#eat{kcal = Kcal}) -> Kcal end, Eats)) - Burnt.
 
--spec weekly_deficit(list(#day{})) -> {number(), number(), number()}.
-weekly_deficit(Days) ->
+-spec rolling_deficit(list(#day{})) -> {number(), number(), number()}.
+rolling_deficit(Days) ->
     Sum = lists:sum(lists:map(fun deficit/1, Days)),
     Count = length(Days),
     Avg = Sum / Count,
@@ -70,9 +71,7 @@ load(Path) ->
         take => Re("^t \\d+ / (?P<goal>\\d+) \\(-?\\d+\\) = \\d+%$"),
         burn => Re("^b (?P<burnt>\\d+) = \\d+% \\(-?\\d+\\)$"),
         macros => Re("^T \\d+:\\d+:\\d+ = \\d+ \\d+%$"),
-        weight => Re(
-            "^w (?P<weight>[\\d.]+)(?: \\(-?[\\d.]+\\) = -?\\d+ -?\\d+ weeks = -?[\\d.]+ -?[\\d.]+ months)?(?: = -?[\\d.]+ weekly, -?[\\d.]+ needed, -?[\\d.]+ wanted)?$"
-        ),
+        weight => Re("^w (?P<weight>[\\d.]+)\\b"),
         kcal => Re(
             "^k +\\d+% +(?P<kcal>\\d+) +(?P<fat>\\d+) +(?P<carb>\\d+) +(?P<protein>\\d+) (?P<brand>\\S+) \"(?P<name>.*)\"$"
         )
@@ -132,7 +131,8 @@ loadfrom(Pats, File, Days, {ok, Line}, LineNo, Day) ->
 % expects days recent-first, returns them recent-last
 calc_rolling([Day | Days], Acc) ->
     Week = [Day | lists:sublist(Days, 6)],
-    Day1 = Day#day{rolling = weekly_deficit(Week)},
+    Month = [Day | lists:sublist(Days, 29)],
+    Day1 = Day#day{weekly = rolling_deficit(Week), monthly = rolling_deficit(Month)},
     calc_rolling(Days, [Day1 | Acc]);
 calc_rolling([], Acc) ->
     Acc.
@@ -170,7 +170,8 @@ dump(Day) ->
             0 -> 0;
             _ -> Protein / (Fat + Carb + Protein) * 100
         end,
-    {Weekly, Needed, Wanted} = Day#day.rolling,
+    {Weekly, Needed, Wanted} = Day#day.weekly,
+    {Monthly, NeededM, WantedM} = Day#day.monthly,
     io:fwrite("d ~ts~n", [kaltime:format(Day#day.date)]),
     io:fwrite("t ~b / ~b (~b) = ~b%~n", [round(X) || X <- [Eaten, Day#day.goal, Left, Daypct]]),
     io:fwrite("b ~b = ~b% (~b)~n", [round(X) || X <- [Day#day.burnt, Burnpct, deficit(Day)]]),
@@ -183,22 +184,17 @@ dump(Day) ->
             ok;
         Weight ->
             ToGo = Weight - ?GOAL_WEIGHT,
-            Low = ToGo / (7 * ?GOAL_DEFICIT_LOW / 3500),
-            High = ToGo / (7 * ?GOAL_DEFICIT_HIGH / 3500),
-            MLow = ToGo / (4 * 7 * ?GOAL_DEFICIT_LOW / 3500),
-            MHigh = ToGo / (4 * 7 * ?GOAL_DEFICIT_HIGH / 3500),
             io:fwrite(
-                "w ~.1f (~b) = ~b ~b weeks = ~.1f ~.1f months = ~b weekly, ~b needed, ~b wanted~n",
+                "w ~.1f (~b) = ~b weekly, ~b/~b; ~b monthly, ~b/~b~n",
                 [
                     Weight,
                     round(ToGo),
-                    round(Low),
-                    round(High),
-                    MLow,
-                    MHigh,
                     round(Weekly),
                     round(Needed),
-                    round(Wanted)
+                    round(Wanted),
+                    round(Monthly),
+                    round(NeededM),
+                    round(WantedM)
                 ]
             )
     end,
