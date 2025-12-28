@@ -70,7 +70,7 @@ load(Path) ->
         day => Re("^d \\S+, (?P<date>\\d+ \\S+ \\d+)$"),
         take => Re("^t \\d+ / (?P<goal>\\d+) \\(-?\\d+\\) = \\d+%$"),
         burn => Re("^b (?P<burnt>\\d+) = \\d+% \\(-?\\d+\\)$"),
-        macros => Re("^T \\d+:\\d+:\\d+ = \\d+ \\d+%$"),
+        macros => Re("^T \\d+:\\d+:\\d+ = \\d+:\\d+:\\d+%, carb/fat=\\d+%$"),
         weight => Re("^w (?P<weight>[\\d.]+)\\b"),
         kcal => Re(
             "^k +\\d+% +(?P<kcal>\\d+) +(?P<fat>\\d+) +(?P<carb>\\d+) +(?P<protein>\\d+) (?P<brand>\\S+) \"(?P<name>.*)\"$"
@@ -165,19 +165,35 @@ dump(Day) ->
             0 -> 0;
             E -> Day#day.burnt / E * 100
         end,
+    Fatpct =
+        case Eaten of
+            0 -> 0;
+            _ -> Fat / (Fat + Carb + Protein) * 100
+        end,
+    Carbpct =
+        case Eaten of
+            0 -> 0;
+            _ -> Carb / (Fat + Carb + Protein) * 100
+        end,
     Proteinpct =
         case Eaten of
             0 -> 0;
             _ -> Protein / (Fat + Carb + Protein) * 100
         end,
+    Carbfat =
+        case Fat + Carb of
+            0 -> 0;
+            _ -> Carb / (Fat + Carb) * 100
+        end,
+
     {Weekly, Needed, Wanted} = Day#day.weekly,
     {Monthly, NeededM, WantedM} = Day#day.monthly,
     io:fwrite("d ~ts~n", [kaltime:format(Day#day.date)]),
     io:fwrite("t ~b / ~b (~b) = ~b%~n", [round(X) || X <- [Eaten, Day#day.goal, Left, Daypct]]),
     io:fwrite("b ~b = ~b% (~b)~n", [round(X) || X <- [Day#day.burnt, Burnpct, deficit(Day)]]),
-    io:fwrite("T ~b:~b:~b = ~b ~b%~n", [
+    io:fwrite("T ~b:~b:~b = ~b:~b:~b%, carb/fat=~b%~n", [
         round(X)
-     || X <- [Fat, Carb, Protein, Fat + Carb + Protein, Proteinpct]
+     || X <- [Fat, Carb, Protein, Fatpct, Carbpct, Proteinpct, Carbfat]
     ]),
     case Day#day.weight of
         0 ->
