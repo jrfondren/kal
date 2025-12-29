@@ -1,0 +1,6 @@
+(executable
+ (public_name kal)
+ (name main)
+ (libraries kal)
+ (ocamlopt_flags
+  (:standard -O3)))
