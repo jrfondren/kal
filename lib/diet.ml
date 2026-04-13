@@ -80,7 +80,7 @@ let dump days =
   let open Printf in
   List.rev days
   |> List.iter (fun d ->
-      let tm = Unix.gmtime d.date in
+      let tm = Unix.localtime d.date in
       let kcal, fat, carb, protein =
         List.fold_left
           (fun (k, f, c, p) e ->
